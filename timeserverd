@@ -23,41 +23,30 @@ else
 fi
 
 if [ "$1" = "S77ntpd" ]; then
-	ntpd -c "$SCRIPT_STORAGE_DIR/ntp.conf" -g > /dev/null 2>&1 &
-	
-	while true; do
+	while :; do
+		logger -t timeserverd "ntpd started" &
+		ntpd -n -c "$SCRIPT_STORAGE_DIR/ntp.conf" -g >/dev/null 2>&1
+		logger -t timeserverd "ntpd dead, restarting..."
 		sleep 5
-		if [ "$(pidof ntpd | wc -w)" -lt 1 ]; then
-			logger -t timeserverd "ntpd dead, restarting..."
-			killall -q ntpd
-			sleep 5
-			ntpd -c "$SCRIPT_STORAGE_DIR/ntp.conf" -g > /dev/null 2>&1 &
-			logger -t timeserverd "ntpd restarted"
-		fi
 	done
 elif [ "$1" = "S77chronyd" ]; then
 	if [ -f /opt/etc/init.d/S06chronyd ]; then
 		/opt/etc/init.d/S06chronyd stop
 		rm -f /opt/etc/init.d/S06chronyd
 	fi
-	
+
 	mkdir -p /opt/var/lib/chrony
 	mkdir -p /opt/var/run/chrony
 	chown -R nobody:nobody /opt/var/lib/chrony
 	chown -R nobody:nobody /opt/var/run/chrony
 	chmod -R 770 /opt/var/lib/chrony
 	chmod -R 770 /opt/var/run/chrony
-	
-	chronyd -r -u nobody -f "$SCRIPT_STORAGE_DIR/chrony.conf" > /dev/null 2>&1 &
-	
-	while true; do
+	ln -s /etc/passwd /opt/etc/passwd >/dev/null 2>&1
+
+	while :; do
+		logger -t timeserverd "chronyd started" &
+		chronyd -n -r -u nobody -f "$SCRIPT_STORAGE_DIR/chrony.conf" >/dev/null 2>&1
+		logger -t timeserverd "chronyd dead, restarting..."
 		sleep 5
-		if [ "$(pidof chronyd | wc -w)" -lt 1 ]; then
-			logger -t timeserverd "chronyd dead, restarting..."
-			killall -q chronyd
-			sleep 5
-			chronyd -r -u nobody -f "$SCRIPT_STORAGE_DIR/chrony.conf" > /dev/null 2>&1 &
-			logger -t timeserverd "chronyd restarted"
-		fi
 	done
 fi
