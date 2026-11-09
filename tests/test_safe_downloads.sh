@@ -37,6 +37,17 @@ Download_File() { return 22; }; Update_File S77chronyd
 check "failed download doesn't reinstall the service" "! grep -q customise trace"
 check "failed download checks the running service" "grep -q check trace"
 
+# A server answering with an empty body is a failed download too.
+: > trace; Download_File() { : > "$2"; }; Update_File S77chronyd
+check "empty download keeps the init script" "grep -q old sd/S77chronyd"
+check "empty download doesn't reinstall the service" "! grep -q customise trace"
+
+# A good download replaces the script and reinstalls the service.
+: > trace; Download_File() { echo new > "$2"; }; Update_File S77chronyd
+check "good download replaces the init script" "grep -q new sd/S77chronyd && [ ! -e sd/S77chronyd.new ]"
+check "good download reinstalls the service" "grep -q customise trace"
+: > trace; Download_File() { return 22; }
+
 # With no saved copy and no network, the real service check doesn't retry forever.
 (
 	eval "$(fn TimeServer_ServiceCheck)"; TimeServer() { echo chronyd; }; rm -f sd/S77chronyd
