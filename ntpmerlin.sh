@@ -431,13 +431,12 @@ Update_File()
 		tmpfile="/tmp/$1"
 		if [ -f "$SCRIPT_DIR/$1" ]
 		then
-			Download_File "$SCRIPT_REPO/$1" "$tmpfile"
-			if ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1
+			if Download_File "$SCRIPT_REPO/$1" "$tmpfile" && [ -s "$tmpfile" ] && ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1
 			then
 				Get_WebUI_Page "$SCRIPT_DIR/$1"
 				sed -i "\\~$MyWebPage~d" "$TEMP_MENU_TREE"
 				rm -f "$SCRIPT_WEBPAGE_DIR/$MyWebPage" 2>/dev/null
-				Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
+				mv -f "$tmpfile" "$SCRIPT_DIR/$1"
 				Print_Output true "New version of $1 downloaded" "$PASS"
 				Mount_WebUI
 			fi
@@ -471,21 +470,17 @@ Update_File()
 	then
 		if [ ! -f "$SHARED_DIR/${1}.md5" ]
 		then
-			Download_File "$SHARED_REPO/$1" "$SHARED_DIR/$1"
-			Download_File "$SHARED_REPO/${1}.md5" "$SHARED_DIR/${1}.md5"
-			tar -xzf "$SHARED_DIR/$1" -C "$SHARED_DIR"
-			rm -f "$SHARED_DIR/$1"
-			Print_Output true "New version of $1 downloaded" "$PASS"
+			if Get_Shared_Archive "$1"
+			then Print_Output true "New version of $1 downloaded" "$PASS"
+			fi
 		else
 			localmd5="$(cat "$SHARED_DIR/${1}.md5")"
 			remotemd5="$(curl -fsL --retry 4 --retry-delay 5 "$SHARED_REPO/${1}.md5")"
 			if [ "$localmd5" != "$remotemd5" ]
 			then
-				Download_File "$SHARED_REPO/$1" "$SHARED_DIR/$1"
-				Download_File "$SHARED_REPO/${1}.md5" "$SHARED_DIR/${1}.md5"
-				tar -xzf "$SHARED_DIR/$1" -C "$SHARED_DIR"
-				rm -f "$SHARED_DIR/$1"
-				Print_Output true "New version of $1 downloaded" "$PASS"
+				if Get_Shared_Archive "$1"
+				then Print_Output true "New version of $1 downloaded" "$PASS"
+				fi
 			fi
 		fi
 	else
@@ -654,9 +649,9 @@ Conf_Exists()
 {
 	if [ -s "$SCRIPT_CONF" ]
 	then
-		dos2unix "$SCRIPT_CONF"
+		if grep -q "$(printf '\r')" "$SCRIPT_CONF"; then dos2unix "$SCRIPT_CONF"; fi
 		chmod 0644 "$SCRIPT_CONF"
-		sed -i -e 's/"//g' "$SCRIPT_CONF"
+		if grep -q '"' "$SCRIPT_CONF"; then sed -i -e 's/"//g' "$SCRIPT_CONF"; fi
 		if grep -q "OUTPUTDATAMODE" "$SCRIPT_CONF"; then
 			sed -i '/OUTPUTDATAMODE/d;' "$SCRIPT_CONF"
 		fi
@@ -968,6 +963,22 @@ Auto_Cron()
 ##----------------------------------------##
 Download_File()
 { /usr/sbin/curl -LSs --retry 4 --retry-delay 5 --retry-connrefused "$1" -o "$2" ; }
+
+Get_Shared_Archive()
+{
+	local sharedTmp="/tmp/${SCRIPT_NAME_LOWER}.shared.$$" retCode=1
+	mkdir -p "$sharedTmp" || return 1
+	if Download_File "$SHARED_REPO/$1" "$sharedTmp/$1" && \
+	   Download_File "$SHARED_REPO/${1}.md5" "$sharedTmp/${1}.md5" && \
+	   [ "$(md5sum < "$sharedTmp/$1" | cut -d' ' -f1)" = "$(cat "$sharedTmp/${1}.md5")" ] && \
+	   tar -xzf "$sharedTmp/$1" -C "$SHARED_DIR"
+	then
+		mv -f "$sharedTmp/${1}.md5" "$SHARED_DIR/${1}.md5"
+		retCode=0
+	fi
+	rm -rf "$sharedTmp"
+	return "$retCode"
+}
 
 NTP_Redirect()
 {
