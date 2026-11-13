@@ -314,7 +314,7 @@ Update_Version()
 					fi
 
 					Update_File ntpdstats_www.asp
-					Download_File "$SCRIPT_REPO/$SCRIPT_NAME_LOWER.sh" "/jffs/scripts/$SCRIPT_NAME_LOWER" && \
+					Download_File "$SCRIPT_REPO/$SCRIPT_NAME_LOWER.sh" "/jffs/scripts/$SCRIPT_NAME_LOWER.new" && sh -n "/jffs/scripts/$SCRIPT_NAME_LOWER.new" && mv -f "/jffs/scripts/$SCRIPT_NAME_LOWER.new" "/jffs/scripts/$SCRIPT_NAME_LOWER" && \
 					Print_Output true "$SCRIPT_NAME successfully updated" "$PASS"
 					chmod 0755 "/jffs/scripts/$SCRIPT_NAME_LOWER"
 					Set_Version_Custom_Settings local "$serverver"
@@ -353,7 +353,7 @@ Update_Version()
 			Update_File S77chronyd
 		fi
 		Update_File ntpdstats_www.asp
-		Download_File "$SCRIPT_REPO/$SCRIPT_NAME_LOWER.sh" "/jffs/scripts/$SCRIPT_NAME_LOWER" && \
+		Download_File "$SCRIPT_REPO/$SCRIPT_NAME_LOWER.sh" "/jffs/scripts/$SCRIPT_NAME_LOWER.new" && sh -n "/jffs/scripts/$SCRIPT_NAME_LOWER.new" && mv -f "/jffs/scripts/$SCRIPT_NAME_LOWER.new" "/jffs/scripts/$SCRIPT_NAME_LOWER" && \
 		Print_Output true "$SCRIPT_NAME successfully updated" "$PASS"
 		chmod 0755 "/jffs/scripts/$SCRIPT_NAME_LOWER"
 		Set_Version_Custom_Settings local "$serverver"
@@ -395,9 +395,16 @@ Update_File()
 {
 	if [ "$1" = "S77ntpd" ] || [ "$1" = "S77chronyd" ]
 	then
-		rm -f "$SCRIPT_DIR"/S77*d
 		srvceFile="$SCRIPT_DIR/$1"
-		Download_File "$SCRIPT_REPO/$1" "$srvceFile"
+		if ! Download_File "$SCRIPT_REPO/$1" "$srvceFile.new" || [ ! -s "$srvceFile.new" ]
+		then
+			rm -f "$srvceFile.new"
+			Print_Output true "Could not download $1, keeping the installed copy" "$WARN"
+			[ -s "$srvceFile" ] && TimeServer_ServiceCheck false
+			return 1
+		fi
+		rm -f "$SCRIPT_DIR"/S77*d
+		mv -f "$srvceFile.new" "$srvceFile"
 		if ! diff -q "$srvceFile" "/opt/etc/init.d/$1" >/dev/null 2>&1
 		then
 			Print_Output true "New version of $1 downloaded" "$PASS"
@@ -452,10 +459,9 @@ Update_File()
 		tmpfile="/tmp/$1"
 		if [ -f "$SCRIPT_DIR/$1" ]
 		then
-			Download_File "$SCRIPT_REPO/$1" "$tmpfile"
-			if ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1
+			if Download_File "$SCRIPT_REPO/$1" "$tmpfile" && [ -s "$tmpfile" ] && ! diff -q "$tmpfile" "$SCRIPT_DIR/$1" >/dev/null 2>&1
 			then
-				Download_File "$SCRIPT_REPO/$1" "$SCRIPT_DIR/$1"
+				mv -f "$tmpfile" "$SCRIPT_DIR/$1"
 				chmod 0755 "$SCRIPT_DIR/$1"
 				Print_Output true "New version of $1 downloaded" "$PASS"
 				TimeServer_Customise
@@ -967,7 +973,7 @@ Auto_Cron()
 ## Modified by Martinski W. [2025-Jan-04] ##
 ##----------------------------------------##
 Download_File()
-{ /usr/sbin/curl -LSs --retry 4 --retry-delay 5 --retry-connrefused "$1" -o "$2" ; }
+{ /usr/sbin/curl -fLSs --retry 4 --retry-delay 5 --retry-connrefused "$1" -o "$2" ; }
 
 NTP_Redirect()
 {
@@ -981,6 +987,8 @@ NTP_Redirect()
 				## drop attempts for clients trying to avoid redirect ##
 				if [ "$ACTION" = "-I" ]
 				then
+					iptables -D FORWARD -i br0 -p tcp --dport 123 -j REJECT 2>/dev/null
+					iptables -D FORWARD -i br0 -p udp --dport 123 -j REJECT 2>/dev/null
 					FWRDSTART="$(iptables -nvL FORWARD --line | grep -E "all.*state RELATED,ESTABLISHED" | tail -1 | awk '{print $1}')"
 					if [ -n "$(iptables -nvL FORWARD --line | grep -E "YazFiFORWARD" | tail -1 | awk '{print $1}')" ]; then
 						FWRDSTART="$(($(iptables -nvL FORWARD --line | grep -E "YazFiFORWARD" | tail -1 | awk '{print $1}') + 1))"
@@ -1216,6 +1224,13 @@ TimeServer_Customise()
 	TIMESERVER_ID="$(TimeServer check)"
 	initTimeServerPath="/opt/etc/init.d/S77$TIMESERVER_ID"
 
+	if ! Download_File "$SCRIPT_REPO/S77$TIMESERVER_ID" "/tmp/S77$TIMESERVER_ID.new" || [ ! -s "/tmp/S77$TIMESERVER_ID.new" ]
+	then
+		rm -f "/tmp/S77$TIMESERVER_ID.new"
+		Print_Output true "Could not download S77$TIMESERVER_ID, keeping the installed copy" "$WARN"
+		return 1
+	fi
+
 	if [ -f /opt/etc/init.d/S77ntpd ]
 	then
 		/opt/etc/init.d/S77ntpd stop >/dev/null 2>&1
@@ -1229,7 +1244,7 @@ TimeServer_Customise()
 		rm -f /opt/etc/init.d/S77chronyd
 	fi
 
-	Download_File "$SCRIPT_REPO/S77$TIMESERVER_ID" "$initTimeServerPath"
+	mv -f "/tmp/S77$TIMESERVER_ID.new" "$initTimeServerPath"
 	chmod a+x "$initTimeServerPath"
 
 	if [ "$TIMESERVER_ID" = "chronyd" ]
