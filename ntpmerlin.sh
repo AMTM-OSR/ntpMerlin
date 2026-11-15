@@ -2416,6 +2416,7 @@ Reset_DB()
 		Print_Output true "Sufficient free space to back up database, proceeding..." "$PASS"
 		if ! cp -a "$NTPDSTATS_DB" "${NTPDSTATS_DB}.bak"; then
 			Print_Output true "Database backup failed, please check storage device" "$WARN"
+			return 1
 		fi
 
 		Print_Output false "Please wait..." "$PASS"
