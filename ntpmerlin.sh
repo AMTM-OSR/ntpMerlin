@@ -1268,7 +1268,11 @@ TimeServer_ServiceCheck()
         Update_File "S77$TIMESERVER_ID" >/dev/null 2>&1
     else
         # Make sure we have the ntpMerlin version #
-        if [ -s "$saveTimeServerPath" ] && [ -s "$initTimeServerPath" ] && \
+        if [ ! -s "$initTimeServerPath" ]
+        then
+            cp -fp "$saveTimeServerPath" "$initTimeServerPath" || return 1
+            chmod a+x "$initTimeServerPath" || return 1
+        elif [ -s "$saveTimeServerPath" ] && [ -s "$initTimeServerPath" ] && \
            ! diff -q "$initTimeServerPath" "$saveTimeServerPath" >/dev/null 2>&1 
         then
             "$initTimeServerPath" stop >/dev/null 2>&1
