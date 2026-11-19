@@ -522,6 +522,12 @@ Conf_FromSettings()
 			do
 				SETTINGNAME="$(echo "$line" | cut -f1 -d'=' | awk '{print toupper($1)}')"
 				SETTINGVALUE="$(echo "$line" | cut -f2 -d'=')"
+				case "$SETTINGNAME:$SETTINGVALUE" in
+					OUTPUTTIMEMODE:unix|OUTPUTTIMEMODE:non-unix|STORAGELOCATION:usb|STORAGELOCATION:jffs|TIMESERVER:ntpd|TIMESERVER:chronyd) ;;
+					DAYSTOKEEP:[1-9][0-9]|DAYSTOKEEP:[1-9][0-9][0-9]) if [ "$SETTINGVALUE" -lt 15 ] || [ "$SETTINGVALUE" -gt 365 ]; then continue; fi ;;
+					LASTXRESULTS:[1-9]|LASTXRESULTS:[1-9][0-9]|LASTXRESULTS:[1-9][0-9][0-9]) if [ "$SETTINGVALUE" -lt 5 ] || [ "$SETTINGVALUE" -gt 100 ]; then continue; fi ;;
+					*) continue ;;
+				esac
 				sed -i "s/$SETTINGNAME=.*/$SETTINGNAME=$SETTINGVALUE/" "$SCRIPT_CONF"
 			done < "$TMPFILE"
 
